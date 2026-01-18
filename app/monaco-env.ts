@@ -1,6 +1,8 @@
 // app/monaco-env.ts
+// This file configures Monaco Editor web workers
+// Only runs on the client side to avoid SSR errors
 
-if (typeof self !== "undefined") {
+if (typeof window !== "undefined" && typeof self !== "undefined") {
   self.MonacoEnvironment = {
     getWorker(_: any, label: string) {
       if (label === "json") {

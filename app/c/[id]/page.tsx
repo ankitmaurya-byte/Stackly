@@ -47,6 +47,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function SnippetPage({ params }: PageProps) {
   const { id } = await params;
+  console.log(id)
   const snippet = await getSnippet(id);
 
   if (!snippet) {
@@ -110,9 +111,9 @@ export default async function SnippetPage({ params }: PageProps) {
             <h3 className="text-white font-medium mb-2">Actions</h3>
             <div className="flex gap-3">
               <button
-                onClick={() => {
-                  navigator.clipboard.writeText(window.location.href);
-                }}
+                // onClick={() => {
+                //   navigator.clipboard.writeText(window.location.href);
+                // }}
                 className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors flex items-center gap-2"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
