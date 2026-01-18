@@ -1,15 +1,6 @@
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
-  reactStrictMode: false,
-
-  webpack(config) {
-    config.module.rules.push({
-      test: /\.ttf$/,
-      type: "asset/resource",
-    });
-    return config;
-  },
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  turbopack: {},
 };
 
-export default nextConfig;
+module.exports = nextConfig;
