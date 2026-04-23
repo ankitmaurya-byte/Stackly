@@ -14,7 +14,9 @@ model CodeSnippet {
   language      String
   rawCode       String   @db.Text
   formattedCode String   @db.Text
+  channelSlug   String?  @map("channel_slug")
   createdAt     DateTime @default(now())
 
+  @@index([channelSlug, createdAt])
   @@index([createdAt])
 }
