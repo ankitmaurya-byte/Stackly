@@ -1,50 +1,68 @@
 @import "tailwindcss";
 
-:root {
-  --background: #111827;
-  --foreground: #f9fafb;
-}
+@theme {
+  --color-bg-base:      #121212;
+  --color-bg-sidebar:   #000000;
+  --color-bg-surface:   #181818;
+  --color-bg-mid:       #1f1f1f;
+  --color-bg-card:      #252525;
+  --color-text:         #ffffff;
+  --color-text-muted:   #b3b3b3;
+  --color-text-dim:     #7c7c7c;
+  --color-accent:       #1ed760;
+  --color-accent-hover: #1db954;
+  --color-border:       #4d4d4d;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --shadow-card:     0 8px 8px rgba(0, 0, 0, 0.3);
+  --shadow-elevated: 0 8px 24px rgba(0, 0, 0, 0.5);
+
+  --radius-pill: 9999px;
+  --radius-card: 8px;
+
   --font-sans: var(--font-inter);
 }
 
+html,
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--color-bg-base);
+  color: var(--color-text);
 }
 
-/* Custom scrollbar for dark mode */
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--color-bg-mid); }
+::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 5px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-text-dim); }
 
-::-webkit-scrollbar-track {
-  background: #1f2937;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #4b5563;
-  border-radius: 5px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #6b7280;
-}
-
-/* Syntax highlighting container styles */
 .syntax-highlighted pre {
   padding: 1.5rem !important;
   margin: 0 !important;
   background: transparent !important;
   overflow-x: auto;
 }
-
 .syntax-highlighted code {
   font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace !important;
   font-size: 14px;
   line-height: 1.6;
+}
+
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+.marquee-track {
+  animation: marquee 60s linear infinite;
+  will-change: transform;
+}
+.marquee-track:hover {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track {
+    animation: none;
+  }
+  .marquee-scroll {
+    overflow-x: auto;
+  }
 }
