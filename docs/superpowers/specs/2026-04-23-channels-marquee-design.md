@@ -31,7 +31,7 @@ Stackly is a Next.js 16 + React 19 app that formats code with Prettier and share
 ## 3. Architectural Approach
 
 **Approach 1 (chosen): Minimal DB change + layout shell**
-- Add one nullable `channelSlug` column to `Snippet`.
+- Add one nullable `channelSlug` column to `CodeSnippet`.
 - Channels live as TypeScript constants in `lib/channels.ts` — no `Channel` table.
 - New Next.js route group `(shell)` provides sidebar + marquee for home and channel pages; `/c/[id]` stays outside the group.
 
@@ -47,23 +47,24 @@ Stackly is a Next.js 16 + React 19 app that formats code with Prettier and share
 
 ### Prisma schema change
 
-Add one nullable column + a compound index:
+The existing model is `CodeSnippet` with fields `id`, `language`, `rawCode`, `formattedCode`, `createdAt`. Add one nullable column + a compound index:
 
 ```prisma
-model Snippet {
-  id           String   @id @default(cuid())
-  code         String
-  language     String
-  channelSlug  String?  @map("channel_slug")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+model CodeSnippet {
+  id            String   @id @default(cuid())
+  language      String
+  rawCode       String   @db.Text
+  formattedCode String   @db.Text
+  channelSlug   String?  @map("channel_slug")
+  createdAt     DateTime @default(now())
 
   @@index([channelSlug, createdAt])
+  @@index([createdAt])
 }
 ```
 
 - `channelSlug` is nullable so existing rows keep working. UI treats `null` as "general" for display purposes but does not backfill.
-- Compound index `(channelSlug, createdAt)` supports the channel-page list query `WHERE channel_slug = ? ORDER BY created_at DESC LIMIT 24`.
+- Compound index `(channelSlug, createdAt)` supports the channel-page list query `WHERE channel_slug = ? ORDER BY created_at DESC LIMIT 24`. Existing `createdAt` index retained.
 - Migration name: `add_channel_slug`.
 
 ### Channels constant (`lib/channels.ts`)
@@ -100,18 +101,22 @@ export function isValidChannelSlug(slug: unknown): slug is ChannelSlug {
 
 ### Samples constant (`lib/samples.ts`)
 
+Each sample is anchored to a `ChannelSlug`. The channel carries the canonical `parser` (via `CHANNELS`), so sample loading fully determines both editor language and target channel from one field.
+
 ```ts
-export const SAMPLES = [
-  { lang: 'javascript', code: 'const sum = (a, b) => a + b;' },
-  { lang: 'typescript', code: 'type User = { id: string; name: string };' },
-  { lang: 'python',     code: 'print("hello, world")' },
-  { lang: 'react',      code: 'useEffect(() => { fetchData(); }, []);' },
-  { lang: 'css',        code: '.btn { border-radius: 9999px; }' },
-  { lang: 'sql',        code: 'SELECT * FROM users WHERE active = true;' },
-  { lang: 'rust',       code: 'fn main() { println!("{}", 42); }' },
-  { lang: 'json',       code: '{ "name": "stackly", "version": "1.0" }' },
-  { lang: 'html',       code: '<button class="pill">Share</button>' },
-  { lang: 'javascript', code: 'arr.filter(Boolean).map(String);' },
+import type { ChannelSlug } from './channels';
+
+export const SAMPLES: ReadonlyArray<{ slug: ChannelSlug; code: string }> = [
+  { slug: 'javascript', code: 'const sum = (a, b) => a + b;' },
+  { slug: 'typescript', code: 'type User = { id: string; name: string };' },
+  { slug: 'python',     code: 'print("hello, world")' },
+  { slug: 'react',      code: 'useEffect(() => { fetchData(); }, []);' },
+  { slug: 'css',        code: '.btn { border-radius: 9999px; }' },
+  { slug: 'sql',        code: 'SELECT * FROM users WHERE active = true;' },
+  { slug: 'rust',       code: 'fn main() { println!("{}", 42); }' },
+  { slug: 'json',       code: '{ "name": "stackly", "version": "1.0" }' },
+  { slug: 'html',       code: '<button class="pill">Share</button>' },
+  { slug: 'javascript', code: 'arr.filter(Boolean).map(String);' },
 ] as const;
 ```
 
@@ -140,8 +145,8 @@ app/
 
 ### Route behavior
 
-- **`/` (home):** renders editor inside shell. Channel is auto-picked from the current language's Prettier parser and can be overridden via `ChannelPicker`. On share, POST includes `channelSlug`.
-- **`/channel/[slug]`:** server-side validates slug against `CHANNEL_SLUGS`. Invalid → `notFound()` (404). Valid → fetches latest 24 snippets via `prisma.snippet.findMany({ where: { channelSlug: slug }, orderBy: { createdAt: 'desc' }, take: 24 })`. Renders channel header + grid of `SnippetCard` components. Empty state card when count = 0.
+- **`/` (home):** renders editor inside shell. Channel defaults to `channelForParser(currentParser)`, is overridden by marquee sample-load, and is finally the user's explicit `ChannelPicker` choice (see "ChannelPicker details" for precedence). On share, POST includes the resulting `channelSlug`.
+- **`/channel/[slug]`:** server-side validates slug against `CHANNEL_SLUGS`. Invalid → `notFound()` (404). Valid → fetches latest 24 snippets via `prisma.codeSnippet.findMany({ where: { channelSlug: slug }, orderBy: { createdAt: 'desc' }, take: 24 })`. Renders channel header + grid of `SnippetCard` components. Empty state card when count = 0.
 - **`/c/[id]`:** unchanged. Deliberately outside `(shell)` group to keep the focused read.
 
 ### API changes
@@ -180,19 +185,23 @@ app/
 - Fixed top of shell, 48px tall, `#181818` bg, 1px `#1f1f1f` bottom border.
 - `@keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }` on a track containing the `SAMPLES` array duplicated (so looping looks seamless). 60s linear infinite. Pause on hover via `:hover { animation-play-state: paused; }`.
 - Each sample: `<button>` styled as a pill — `#1f1f1f` bg, `#b3b3b3` text, 12px mono font, `4px 12px` padding, `9999px` radius. Hover text → `#1ed760`.
-- Click dispatches `new CustomEvent('stackly:load-sample', { detail: { code, lang } })`. Home editor's client component subscribes, loads `code` into the editor, switches language to `lang`.
+- Click dispatches `new CustomEvent('stackly:load-sample', { detail: { code, slug } })`. Home editor's client component subscribes and, on receipt: (1) loads `code` into the editor, (2) looks up the channel via `CHANNELS.find(c => c.slug === slug)`, (3) sets the editor's active Prettier parser to that channel's `parser` (null-parser channels skip formatting), and (4) sets `ChannelPicker` selection to `slug`.
 - `prefers-reduced-motion: reduce` → animation disabled; track becomes `overflow-x: auto` so users can scroll manually.
 
 ### ChannelPicker details
 
 - Small dropdown (pill, `#1f1f1f` bg) next to the Share button on the home editor.
-- Options come from `CHANNELS`. Default selection comes from `channelForParser(currentParser)`; user selection overrides until they change language again.
-- Selected row shows a subtle `#1ed760` check.
+- Options come from `CHANNELS`. Selected row shows a subtle `#1ed760` check.
+- **Selection sources (precedence, highest first):**
+  1. Explicit user pick in the dropdown — sticky until the user changes it or loads a new sample.
+  2. Sample-load event — sets selection to `sample.slug` (overrides prior state).
+  3. Existing `LanguageSelector` change — calls `channelForParser(newParser)` as a fallback default. Ambiguous parsers (e.g. `babel` maps to multiple channels) resolve to the first match in `CHANNELS` order, which puts `general` before language-specific variants so the default is the safe generic bucket.
+- The dropdown is the source of truth for the `channelSlug` sent in the Share POST.
 
 ### SnippetCard details
 
 - `bg-[#181818] rounded-[8px] p-4 hover:bg-[#252525] transition-colors` with a subtle shadow on hover.
-- Contents: top-right language badge (from `Snippet.language`); code preview (first 8 lines, mono 12px, `#cbcbcb`); bottom-left relative timestamp (e.g. "2h ago"); entire card wraps an `<a href="/c/{id}">`.
+- Contents: top-right language badge (from `CodeSnippet.language`); code preview (first 8 lines of `formattedCode`, falling back to `rawCode` if the former is empty, mono 12px, `#cbcbcb`); bottom-left relative timestamp (e.g. "2h ago"); entire card wraps an `<a href="/c/{id}">`.
 
 ---
 
@@ -275,8 +284,10 @@ The project has no tests today. Add a minimal Vitest setup — no full E2E harne
   - `CHANNEL_SLUGS` length matches `CHANNELS` length.
   - `isValidChannelSlug` returns `true` for every slug in `CHANNEL_SLUGS` and `false` for `"not-real"`, `null`, `42`, `""`.
   - `channelForParser('typescript')` returns `'typescript'`.
-  - `channelForParser('babel')` returns the first babel match (`'javascript'`).
+  - `channelForParser('babel')` returns `'general'` (first match in `CHANNELS` order — documents the ambiguous-parser fallback behavior described in ChannelPicker precedence).
+  - `channelForParser('css')` returns `'css'`.
   - `channelForParser(null)` returns `'general'`.
+  - `channelForParser('unknown-parser')` returns `'general'`.
 - `app/api/snippet/route.test.ts`
   - Valid `channelSlug` persists as-is.
   - Invalid `channelSlug` falls back to `"general"`.
